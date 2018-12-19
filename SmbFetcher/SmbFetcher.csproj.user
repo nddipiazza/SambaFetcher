@@ -1,0 +1,13 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Debug|AnyCPU'">
+    <StartArguments>"\\192.168.1.47\smbshare" "fusionis" "administrator" "download" "\dir_3368\85.txt"</StartArguments>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(RunConfiguration)' == 'Default' ">
+    <StartAction>Project</StartAction>
+    <StartArguments>'\\192.168.1.47\smbshare' "fusionis" "administrator" "download" '\dir_3368\85.txt'</StartArguments>
+    <EnvironmentVariables>
+      <Variable name="PWD" value="YourPassword" />
+    </EnvironmentVariables>
+  </PropertyGroup>
+</Project>
