@@ -5,7 +5,7 @@
   </PropertyGroup>
   <PropertyGroup Condition=" '$(RunConfiguration)' == 'Default' ">
     <StartAction>Project</StartAction>
-    <StartArguments>'\\192.168.1.47\smbshare' "fusionis" "administrator" "download" '\dir_3368\85.txt'</StartArguments>
+    <StartArguments>\\\\192.168.1.47\\smbshare fusionis administrator download \\dir_3368\\85.txt</StartArguments>
     <EnvironmentVariables>
       <Variable name="PWD" value="YourPassword" />
     </EnvironmentVariables>
