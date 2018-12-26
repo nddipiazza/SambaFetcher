@@ -110,6 +110,7 @@ namespace SmbFetcher {
       string username = args[2];
       string action = args[3];
       string filePath = args.Length > 4 ? args[4] : "";
+      string format = "MM/dd/yyyy h:mm:ss tt";
       UNCAccess unc = new UNCAccess(uncPath, username, domain, Environment.GetEnvironmentVariable("PWD"));
       try {
         if ("download".Equals(action)) {
@@ -134,9 +135,9 @@ namespace SmbFetcher {
             }
             foreach (FileInfo child in directoryInfo.GetFiles()) {
               Console.Write("file\t" + child.Name);
-              Console.Write("\t" + child.LastAccessTimeUtc);
-              Console.Write("\t" + child.LastWriteTimeUtc);
-              Console.WriteLine("\t" + child.CreationTimeUtc);
+              Console.Write("\t" + child.LastAccessTimeUtc.ToString(format));
+              Console.Write("\t" + child.LastWriteTimeUtc.ToString(format));
+              Console.WriteLine("\t" + child.CreationTimeUtc.ToString(format));
             }
           } else {
             Console.WriteLine("file");
@@ -150,9 +151,9 @@ namespace SmbFetcher {
               stringBuilder.Append(fsar.IdentityReference.Value);
             }
             Console.WriteLine(stringBuilder);
-            Console.WriteLine(fileInfo.CreationTimeUtc);
-            Console.WriteLine(fileInfo.LastAccessTimeUtc);
-            Console.WriteLine(fileInfo.LastWriteTimeUtc);
+            Console.WriteLine(fileInfo.CreationTimeUtc.ToString(format));
+            Console.WriteLine(fileInfo.LastAccessTimeUtc.ToString(format));
+            Console.WriteLine(fileInfo.LastWriteTimeUtc.ToString(format));
             Console.WriteLine(fileInfo.Length);
           }
         }
