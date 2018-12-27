@@ -1,168 +1,58 @@
 ﻿using System;
-using System.IO;
-using System.Security.AccessControl;
-using System.Text;
-using System.Runtime.InteropServices;
-using BOOL = System.Boolean;
-using DWORD = System.UInt32;
-using LPWSTR = System.String;
-using NET_API_STATUS = System.UInt32;
+using System.Threading;
+using CommandLine;
+using Unosquare.Labs.EmbedIO;
+using Unosquare.Labs.EmbedIO.Constants;
 
 namespace SmbFetcher {
-  public class UNCAccess {
-    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
-    internal struct USE_INFO_2 {
-      internal LPWSTR ui2_local;
-      internal LPWSTR ui2_remote;
-      internal LPWSTR ui2_password;
-      internal DWORD ui2_status;
-      internal DWORD ui2_asg_type;
-      internal DWORD ui2_refcount;
-      internal DWORD ui2_usecount;
-      internal LPWSTR ui2_username;
-      internal LPWSTR ui2_domainname;
-    }
+  internal class CmdOptions {
+    [Option('P', "path", Required = true, HelpText = "UNC path of the Windows Share we are trying to access")]
+    public string UncPath { get; set; }
 
-    [DllImport("NetApi32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
-    internal static extern NET_API_STATUS NetUseAdd(
-        LPWSTR UncServerName,
-        DWORD Level,
-        ref USE_INFO_2 Buf,
-        out DWORD ParmError);
+    [Option('u', "username", Required = true, HelpText = "Username to authenticate with while accessing the windows share")]
+    public string Username { get; set; }
 
-    [DllImport("NetApi32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
-    internal static extern NET_API_STATUS NetUseDel(
-        LPWSTR UncServerName,
-        LPWSTR UseName,
-        DWORD ForceCond);
+    [Option('d', "domain", Required = true, HelpText = "Domain to authenticate with while accessing the windows share")]
+    public string Domain { get; set; }
 
-    private string sUNCPath;
-    private string sUser;
-    private string sPassword;
-    private string sDomain;
-    private int iLastError;
-    public UNCAccess() {
-    }
-    public UNCAccess(string UNCPath, string User, string Domain, string Password) {
-      login(UNCPath, User, Domain, Password);
-    }
-    public int LastError {
-      get { return iLastError; }
-    }
+    [Option('r', "port", Required = true, HelpText = "Port of the local web server")]
+    public int Port { get; set; }
 
-    /// <summary>
-    /// Connects to a UNC share folder with credentials
-    /// </summary>
-    /// <param name="UNCPath">UNC share path</param>
-    /// <param name="User">Username</param>
-    /// <param name="Domain">Domain</param>
-    /// <param name="Password">Password</param>
-    /// <returns>True if login was successful</returns>
-    public bool login(string UNCPath, string User, string Domain, string Password) {
-      sUNCPath = UNCPath;
-      sUser = User;
-      sPassword = Password;
-      sDomain = Domain;
-      return NetUseWithCredentials();
-    }
-    private bool NetUseWithCredentials() {
-      uint returncode;
-      try {
-        USE_INFO_2 useinfo = new USE_INFO_2();
-
-        useinfo.ui2_remote = sUNCPath;
-        useinfo.ui2_username = sUser;
-        useinfo.ui2_domainname = sDomain;
-        useinfo.ui2_password = sPassword;
-        useinfo.ui2_asg_type = 0;
-        useinfo.ui2_usecount = 1;
-        uint paramErrorIndex;
-        returncode = NetUseAdd(null, 2, ref useinfo, out paramErrorIndex);
-        iLastError = (int)returncode;
-        return returncode == 0;
-      } catch {
-        iLastError = Marshal.GetLastWin32Error();
-        return false;
-      }
-    }
-
-    /// <summary>
-    /// Closes the UNC share
-    /// </summary>
-    /// <returns>True if closing was successful</returns>
-    public bool NetUseDelete() {
-      uint returncode;
-      try {
-        returncode = NetUseDel(null, sUNCPath, 2);
-        iLastError = (int)returncode;
-        return (returncode == 0);
-      } catch {
-        iLastError = Marshal.GetLastWin32Error();
-        return false;
-      }
-    }
+    [Option('p', "password", HelpText = "Password of the user of whom we are authenticating")]
+    public string Password { get; set; }
   }
-
   class Program {
+
     static void Main(string[] args) {
-      string uncPath = args[0];
-      string domain = args[1];
-      string username = args[2];
-      string action = args[3];
-      string filePath = args.Length > 4 ? args[4] : "";
-      string format = "MM/dd/yyyy h:mm:ss tt";
-      UNCAccess unc = new UNCAccess(uncPath, username, domain, Environment.GetEnvironmentVariable("PWD"));
-      try {
-        if ("download".Equals(action)) {
-          using (Stream myOutStream = Console.OpenStandardOutput()) {
-            Stream inputStream = File.OpenRead(uncPath + filePath);
-            byte[] buffer = new byte[1024];
-            int bytesRead;
-            while ((bytesRead = inputStream.Read(buffer, 0, 1024)) > 0) {
-              myOutStream.Write(buffer, 0, bytesRead);
-            }
-            myOutStream.Flush();
-            inputStream.Close();
-          }
-          Console.SetOut(TextWriter.Null);
-        } else if ("info".Equals(action)) {
-          Console.OutputEncoding = Encoding.UTF8;
-          if (File.GetAttributes(uncPath + filePath).HasFlag(FileAttributes.Directory)) {
-            Console.WriteLine("directory");
-            DirectoryInfo directoryInfo = new DirectoryInfo(uncPath + filePath);
-            foreach (DirectoryInfo child in directoryInfo.GetDirectories()) {
-              Console.WriteLine("directory\t" + child.Name);
-            }
-            foreach (FileInfo child in directoryInfo.GetFiles()) {
-              Console.Write("file\t" + child.Name);
-              Console.Write("\t" + child.LastAccessTimeUtc.ToString(format));
-              Console.Write("\t" + child.LastWriteTimeUtc.ToString(format));
-              Console.WriteLine("\t" + child.CreationTimeUtc.ToString(format));
-            }
-          } else {
-            Console.WriteLine("file");
-            FileInfo fileInfo = new FileInfo(uncPath + filePath);
-            FileSecurity fileSecurity = fileInfo.GetAccessControl();
-            StringBuilder stringBuilder = new StringBuilder();
-            foreach (FileSystemAccessRule fsar in fileSecurity.GetAccessRules(true, true, typeof(System.Security.Principal.SecurityIdentifier))) {
-              if (stringBuilder.Length != 0) {
-                stringBuilder.Append(",");
-              }
-              stringBuilder.Append(fsar.IdentityReference.Value);
-            }
-            Console.WriteLine(stringBuilder);
-            Console.WriteLine(fileInfo.CreationTimeUtc.ToString(format));
-            Console.WriteLine(fileInfo.LastAccessTimeUtc.ToString(format));
-            Console.WriteLine(fileInfo.LastWriteTimeUtc.ToString(format));
-            Console.WriteLine(fileInfo.Length);
-          }
-        }
-      } catch (Exception e) {
-        Console.WriteLine("Error: {0}", e);
-        Environment.Exit(1);
-      } finally {
-        unc.NetUseDelete();
-      }
+      var cmdOptions = Parser.Default.ParseArguments<CmdOptions>(args);
+      cmdOptions.WithParsed(
+          options => {
+            Run(options);
+          });
     }
+
+    public static void Run(CmdOptions options) {
+      Console.WriteLine("Path: {0}", options.UncPath);
+      Console.WriteLine("Username: {0}", options.Username);
+
+      UNCAccess unc = new UNCAccess(options.UncPath, options.Username, options.Domain, Environment.GetEnvironmentVariable("PWD"));
+
+      try {
+        var url = string.Format("http://localhost:{0}/", options.Port);
+
+        var server = new WebServer(url, RoutingStrategy.Regex);
+
+        server.RegisterModule(new SmbServerModule());
+
+        var cts = new CancellationTokenSource();
+        var task = server.RunAsync(cts.Token);
+
+        task.Wait();  
+      } finally {
+        unc?.NetUseDelete();
+      }
+
+    }
+
   }
 }
