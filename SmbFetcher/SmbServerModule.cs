@@ -34,11 +34,11 @@ namespace SmbFetcher {
 
     async Task<bool> HandleGet(Unosquare.Labs.EmbedIO.IHttpContext context, CancellationToken ct, bool sendBuffer = true) {
 
-      Console.WriteLine("Query String {0}", context.Request.QueryString);
+      //Console.WriteLine("Query String {0}", context.Request.QueryString);
 
       string action = context.Request.QueryString["action"];
       string path = context.Request.QueryString["path"];
-      Console.WriteLine("Request action={0}, path={1}", action, path);
+      //Console.WriteLine("Request action={0}, path={1}", action, path);
 
       if (action == null) {
         context.Response.StatusCode = 200;
@@ -59,6 +59,7 @@ namespace SmbFetcher {
       } else if ("info".Equals(action)) {
         var responseSb = new StringBuilder();
         if (File.GetAttributes(path).HasFlag(FileAttributes.Directory)) {
+          responseSb.AppendLine("directory");
           DirectoryInfo directoryInfo = new DirectoryInfo(path);
 
           foreach (DirectoryInfo child in directoryInfo.GetDirectories()) {

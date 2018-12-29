@@ -18,6 +18,9 @@ namespace SmbFetcher {
     [Option('r', "port", Required = true, HelpText = "Port of the local web server")]
     public int Port { get; set; }
 
+    [Option('h', "host", Required = true, HelpText = "Host of the local web server")]
+    public string Host { get; set; }
+
     [Option('p', "password", HelpText = "Password of the user of whom we are authenticating")]
     public string Password { get; set; }
   }
@@ -32,13 +35,13 @@ namespace SmbFetcher {
     }
 
     public static void Run(CmdOptions options) {
-      Console.WriteLine("Path: {0}", options.UncPath);
-      Console.WriteLine("Username: {0}", options.Username);
+      //Console.WriteLine("Path: {0}", options.UncPath);
+      //Console.WriteLine("Username: {0}", options.Username);
 
       UNCAccess unc = new UNCAccess(options.UncPath, options.Username, options.Domain, Environment.GetEnvironmentVariable("PWD"));
 
       try {
-        var url = string.Format("http://localhost:{0}/", options.Port);
+        var url = string.Format("http://{0}:{1}/", options.Host, options.Port);
 
         var server = new WebServer(url, RoutingStrategy.Regex);
 
