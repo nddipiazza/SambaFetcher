@@ -2,7 +2,7 @@
 
 C# samba web server. Uses EmbedIO project to host a very simple web server capable of providing authenticated connection to Samba.
 
-Usage: 
+Usage: `SambaFetcher.exe`
 
 ```
 
