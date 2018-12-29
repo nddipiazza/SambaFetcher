@@ -4,6 +4,8 @@ C# samba web server. Uses EmbedIO project to host a very simple web server capab
 
 Usage: `SambaFetcher.exe`
 
+Starts the samba web server. To stop it, kill the process.
+
 ```
 
   -P, --path        Required. UNC path of the Windows Share we are trying to access
