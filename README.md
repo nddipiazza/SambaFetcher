@@ -34,4 +34,5 @@ Endpoint:
 Required headers:
 
 `path` = the path to a file or folder.
+
 `action` = either `info` to get information about the file or folder, or `download` to download the file.
