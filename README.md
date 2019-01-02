@@ -29,7 +29,9 @@ Starts the samba web server. To stop it, kill the process.
 
 Endpoint: 
 
-`http://{host}:{port}/?action={action}&path={unc path to file or folder}`
+`http://{host}:{port}`
+
+Required headers:
 
 `path` = the path to a file or folder.
 `action` = either `info` to get information about the file or folder, or `download` to download the file.
