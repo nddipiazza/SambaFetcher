@@ -25,6 +25,7 @@ namespace SmbFetcher {
     public SmbServerModule() {
       AddHandler(Unosquare.Labs.EmbedIO.ModuleMap.AnyPath, HttpVerbs.Head, (context, ct) => HandleGet(context, ct, false));
       AddHandler(Unosquare.Labs.EmbedIO.ModuleMap.AnyPath, HttpVerbs.Get, (context, ct) => HandleGet(context, ct));
+
     }
 
     /// <summary>
@@ -33,11 +34,8 @@ namespace SmbFetcher {
     public override string Name => nameof(SmbServerModule).Humanize();
 
     async Task<bool> HandleGet(Unosquare.Labs.EmbedIO.IHttpContext context, CancellationToken ct, bool sendBuffer = true) {
-
-      //Console.WriteLine("Query String {0}", context.Request.QueryString);
-
-      string action = context.Request.QueryString["action"];
-      string path = context.Request.QueryString["path"];
+      string action = context.Request.Headers["action"];
+      string path = context.Request.Headers["path"];
       //Console.WriteLine("Request action={0}, path={1}", action, path);
 
       if (action == null) {
