@@ -55,16 +55,36 @@ namespace SmbFetcher {
       }
 
       if ("download".Equals(action)) {
-        using (Stream inputStream = File.OpenRead(path)) {
-          context.Response.ContentType = "application/octet-stream";
-          context.Response.AddHeader(Headers.CacheControl, "no-cache");
-          context.Response.AddHeader("Pragma", "no-cache");
-          context.Response.AddHeader("Expires", "0");
-          if (sendBuffer == false) {
-            return true;
+        NTStatus status;
+        SMB2FileStore tree = smb.TreeConnect(share, out status) as SMB2FileStore;
+        if (status == NTStatus.STATUS_SUCCESS) {
+          object handle;
+          FileStatus fs;
+          status = tree.CreateFile(out handle, out fs, path == null ? "" : path, AccessMask.GENERIC_READ, 0, ShareAccess.Read, CreateDisposition.FILE_OPEN,
+                         CreateOptions.FILE_NON_DIRECTORY_FILE, null);
+          if (status == NTStatus.STATUS_SUCCESS) {
+            try {
+              int bytesCount = 0;
+              byte[] data;
+              do {
+                status = tree.ReadFile(out data, handle, bytesCount, ChunkSize);
+                if (status == NTStatus.STATUS_SUCCESS) {
+                  WriteToOutputStream(context.Response, data, ct);
+                  bytesCount += data.Length;
+                } else {
+                  throw new Exception("Couldn't get all the file data");
+                }
+              } while (data.Length != ChunkSize && data.Length > 0);
+            } finally {
+              tree.CloseFile(handle);
+            }
           }
-          await WriteToOutputStream(context.Response, inputStream, ct);
         }
+        context.Response.ContentType = "application/octet-stream";
+        context.Response.AddHeader(Headers.CacheControl, "no-cache");
+        context.Response.AddHeader("Pragma", "no-cache");
+        context.Response.AddHeader("Expires", "0");
+        await context.Response.OutputStream.FlushAsync();
       } else if ("info".Equals(action)) {
         var responseSb = new StringBuilder();
         NTStatus status;
@@ -100,7 +120,7 @@ namespace SmbFetcher {
               status = tree.GetFileInformation(out FileInformation fileInformation, handle, FileInformationClass.FileBasicInformation);
               if (status == NTStatus.STATUS_SUCCESS) {
                 FileBasicInformation fileAllInformation = (FileBasicInformation)fileInformation;
-                status = tree.GetSecurityInformation(out SecurityDescriptor securityDescriptor, handle, SecurityInformation.GROUP_SECURITY_INFORMATION);
+                status = tree.GetSecurityInformation(out SecurityDescriptor securityDescriptor, handle, SecurityInformation.OWNER_SECURITY_INFORMATION);
                 if (status == NTStatus.STATUS_SUCCESS) {
                   StringBuilder stringBuilder = new StringBuilder();
                   responseSb.AppendLine(stringBuilder.ToString());
@@ -134,12 +154,11 @@ namespace SmbFetcher {
       return true;
     }
 
-    static async Task WriteToOutputStream(
+    static void WriteToOutputStream(
       Unosquare.Labs.EmbedIO.IHttpResponse response,
-        Stream buffer,
+        byte[] buffer,
         CancellationToken ct) {
-      await buffer.CopyToAsync(response.OutputStream, ChunkSize, ct);
-      response.OutputStream.Flush();
+      response.OutputStream.Write(buffer, 0, buffer.Length);
     }
 
     public void Dispose() {
