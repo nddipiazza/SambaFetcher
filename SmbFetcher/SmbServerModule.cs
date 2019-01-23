@@ -123,6 +123,7 @@ namespace SmbFetcher {
                 status = tree.GetSecurityInformation(out SecurityDescriptor securityDescriptor, handle, SecurityInformation.OWNER_SECURITY_INFORMATION);
                 if (status == NTStatus.STATUS_SUCCESS) {
                   StringBuilder stringBuilder = new StringBuilder();
+                  // TODO - add ACL sids here...
                   responseSb.AppendLine(stringBuilder.ToString());
                   responseSb.AppendLine(fileAllInformation.CreationTime.Time.Value.ToString(Format));
                   responseSb.AppendLine(fileAllInformation.LastAccessTime.Time.Value.ToString(Format));
