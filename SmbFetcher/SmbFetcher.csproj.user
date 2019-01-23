@@ -5,7 +5,7 @@
   </PropertyGroup>
   <PropertyGroup Condition=" '$(RunConfiguration)' == 'Default' ">
     <StartAction>Project</StartAction>
-    <StartArguments>-P whocares -u whocares -d whocares -r 9055 -h 127.0.0.1 -p whocares</StartArguments>
+    <StartArguments>-s fun -u administrator -d fusionis -h localhost -r 4001 -H 192.168.1.29 -p FroFro123#</StartArguments>
     <EnvironmentVariables>
       <Variable name="PWD" value="YourPassword" />
     </EnvironmentVariables>

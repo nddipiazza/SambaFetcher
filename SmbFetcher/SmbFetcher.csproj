@@ -76,6 +76,12 @@
     <Reference Include="CommandLine">
       <HintPath>..\packages\CommandLineParser.2.3.0\lib\net45\CommandLine.dll</HintPath>
     </Reference>
+    <Reference Include="Utilities">
+      <HintPath>..\..\..\SMBLibrary\SMBLibrary\bin\Debug\Utilities.dll</HintPath>
+    </Reference>
+    <Reference Include="SMBLibrary">
+      <HintPath>..\..\..\SMBLibrary\SMBLibrary\bin\Debug\SMBLibrary.dll</HintPath>
+    </Reference>
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Program.cs" />

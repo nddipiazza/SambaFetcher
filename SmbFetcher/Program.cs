@@ -5,23 +5,26 @@ using Unosquare.Labs.EmbedIO;
 using Unosquare.Labs.EmbedIO.Constants;
 
 namespace SmbFetcher {
-  internal class CmdOptions {
-    [Option('P', "path", Required = true, HelpText = "UNC path of the Windows Share we are trying to access")]
-    public string UncPath { get; set; }
+  class CmdOptions {
+    [Option('s', "share", Required = true, HelpText = "Name of the samba share.")]
+    public string Share { get; set; }
 
-    [Option('u', "username", Required = true, HelpText = "Username to authenticate with while accessing the windows share")]
+    [Option('u', "username", Required = true, HelpText = "Username to authenticate with while accessing the windows share.")]
     public string Username { get; set; }
 
-    [Option('d', "domain", Required = true, HelpText = "Domain to authenticate with while accessing the windows share")]
+    [Option('d', "domain", Required = true, HelpText = "Domain to authenticate with while accessing the windows share.")]
     public string Domain { get; set; }
 
-    [Option('r', "port", Required = true, HelpText = "Port of the local web server")]
+    [Option('r', "port", Required = true, HelpText = "Port of the local web server.")]
     public int Port { get; set; }
 
-    [Option('h', "host", Required = true, HelpText = "Host of the local web server")]
+    [Option('H', "smbHost", Required = true, HelpText = "Host of the samba server.")]
+    public string SmbHost { get; set; }
+
+    [Option('h', "host", Required = true, HelpText = "Host of the local web server.")]
     public string Host { get; set; }
 
-    [Option('p', "password", HelpText = "Password of the user of whom we are authenticating")]
+    [Option('p', "password", HelpText = "Password of the user of whom we are authenticating.")]
     public string Password { get; set; }
   }
   class Program {
@@ -35,27 +38,20 @@ namespace SmbFetcher {
     }
 
     public static void Run(CmdOptions options) {
-      //Console.WriteLine("Path: {0}", options.UncPath);
-      //Console.WriteLine("Username: {0}", options.Username);
 
-      UNCAccess unc = new UNCAccess(options.UncPath, options.Username, options.Domain, Environment.GetEnvironmentVariable("PWD"));
-
-      try {
+      using (SmbServerModule module = new SmbServerModule(options.SmbHost, options.Domain, options.Username, options.Password, options.Share)) {
         var url = string.Format("http://{0}:{1}/", options.Host, options.Port);
 
         var server = new WebServer(url, RoutingStrategy.Regex);
 
-        server.RegisterModule(new SmbServerModule());
+        server.RegisterModule(module);
 
         var cts = new CancellationTokenSource();
         var task = server.RunAsync(cts.Token);
 
         task.Wait();  
-      } finally {
-        unc?.NetUseDelete();
+
       }
-
     }
-
   }
 }

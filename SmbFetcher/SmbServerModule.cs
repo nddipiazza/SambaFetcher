@@ -5,27 +5,38 @@ using System.Threading.Tasks;
 using Unosquare.Labs.EmbedIO.Constants;
 using System;
 using System.Text;
-using System.Security.AccessControl;
 using System.Collections.Generic;
+using SMBLibrary.Client;
+using SMBLibrary;
 
 namespace SmbFetcher {
-  public class SmbServerModule : Unosquare.Labs.EmbedIO.WebModuleBase {
+  public class SmbServerModule : Unosquare.Labs.EmbedIO.WebModuleBase, IDisposable {
     /// <summary>
     /// The chunk size for sending files
     /// </summary>
     const int ChunkSize = 4096;
     const string Format = "MM/dd/yyyy h:mm:ss tt";
     UTF8Encoding utf8 = new UTF8Encoding();
+    SMB2Client smb;
+    string share;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="SmbServerModule"/> class.
     /// </summary>
     /// <param name="basePath">The base path.</param>
     /// <param name="jsonPath">The json path.</param>
-    public SmbServerModule() {
+    public SmbServerModule(string host, string domain, string username, string password, string share) {
       AddHandler(Unosquare.Labs.EmbedIO.ModuleMap.AnyPath, HttpVerbs.Head, (context, ct) => HandleGet(context, ct, false));
       AddHandler(Unosquare.Labs.EmbedIO.ModuleMap.AnyPath, HttpVerbs.Get, (context, ct) => HandleGet(context, ct));
-
+      smb = new SMB2Client();
+      if (!smb.Connect(System.Net.IPAddress.Parse(host), SMBTransportType.DirectTCPTransport)) {
+        Console.WriteLine("Error connecting.");
+      }
+      var status = smb.Login(domain, username, password);
+      if (status != NTStatus.STATUS_SUCCESS) {
+        throw new Exception("Could not connect to smb server. Status: " + status);
+      }
+      this.share = share;
     }
 
     /// <summary>
@@ -56,35 +67,62 @@ namespace SmbFetcher {
         }
       } else if ("info".Equals(action)) {
         var responseSb = new StringBuilder();
-        if (File.GetAttributes(path).HasFlag(FileAttributes.Directory)) {
-          responseSb.AppendLine("directory");
-          DirectoryInfo directoryInfo = new DirectoryInfo(path);
-
-          foreach (DirectoryInfo child in directoryInfo.GetDirectories()) {
-            responseSb.AppendLine("directory\t" + child.Name);
-          }
-          foreach (FileInfo child in directoryInfo.GetFiles()) {
-            responseSb.Append("file\t" + child.Name);
-            responseSb.Append("\t" + child.LastAccessTimeUtc.ToString(Format));
-            responseSb.Append("\t" + child.LastWriteTimeUtc.ToString(Format));
-            responseSb.AppendLine("\t" + child.CreationTimeUtc.ToString(Format));
+        NTStatus status;
+        SMB2FileStore tree = smb.TreeConnect(share, out status) as SMB2FileStore;
+        if (status == NTStatus.STATUS_SUCCESS) {
+          object handle;
+          FileStatus fs;
+          status = tree.CreateFile(out handle, out fs, path == null ? "" : path, AccessMask.GENERIC_READ, 0, ShareAccess.Read, CreateDisposition.FILE_OPEN,
+                                   CreateOptions.FILE_DIRECTORY_FILE, null);
+          if (status == NTStatus.STATUS_SUCCESS) {
+            status = tree.GetFileInformation(out FileInformation fileInformation, handle, FileInformationClass.FileBasicInformation);
+            if (status == NTStatus.STATUS_SUCCESS) {
+              FileBasicInformation fileBasicInformation = (FileBasicInformation)fileInformation;
+              if (fileBasicInformation.FileAttributes.HasFlag(SMBLibrary.FileAttributes.Directory)) {
+                status = tree.QueryDirectory(out List<QueryDirectoryFileInformation> files, handle, "*", FileInformationClass.FileDirectoryInformation);
+                foreach (QueryDirectoryFileInformation file in files) {
+                  if (file.FileInformationClass.Equals(FileInformationClass.FileDirectoryInformation)) {
+                    FileDirectoryInformation fileDirectoryInformation = (FileDirectoryInformation)file;
+                    if (fileDirectoryInformation.FileName.Equals(".") || fileDirectoryInformation.FileName.Equals("..")) {
+                      continue;
+                    }
+                    if (fileDirectoryInformation.FileAttributes.HasFlag(SMBLibrary.FileAttributes.Directory)) {
+                      responseSb.AppendLine("directory\t" + fileDirectoryInformation.FileName);
+                    } else {
+                      responseSb.Append("file\t" + fileDirectoryInformation.FileName);
+                      responseSb.Append("\t" + fileDirectoryInformation.LastAccessTime.ToString(Format));
+                      responseSb.Append("\t" + fileDirectoryInformation.LastWriteTime.ToString(Format));
+                      responseSb.AppendLine("\t" + fileDirectoryInformation.CreationTime.ToString(Format));
+                    }
+                  }
+                }
+              } else {
+                responseSb.AppendLine("file");
+                status = tree.GetSecurityInformation(out SecurityDescriptor securityDescriptor, handle, SecurityInformation.DACL_SECURITY_INFORMATION |
+                                            SecurityInformation.SACL_SECURITY_INFORMATION | SecurityInformation.OWNER_SECURITY_INFORMATION);
+                if (status == NTStatus.STATUS_SUCCESS) {
+                  StringBuilder stringBuilder = new StringBuilder();
+                  responseSb.AppendLine(stringBuilder.ToString());
+                  responseSb.AppendLine(fileBasicInformation.CreationTime.ToString());
+                  responseSb.AppendLine(fileBasicInformation.LastAccessTime.ToString());
+                  responseSb.AppendLine(fileBasicInformation.LastWriteTime.ToString());
+                  responseSb.AppendLine(fileBasicInformation.Length + "");
+                } else {
+                  responseSb.Append("Error: Did not get success status when getting file security information = ");
+                  responseSb.AppendLine(status.ToString());
+                }
+              }
+            } else {
+              responseSb.Append("Error: Did not get success status when getting file information = ");
+              responseSb.AppendLine(status.ToString());
+            }
+          } else {
+            responseSb.Append("Error: Did not get success status trying to connect to file = ");
+            responseSb.AppendLine(status.ToString());
           }
         } else {
-          responseSb.AppendLine("file");
-          FileInfo fileInfo = new FileInfo(path);
-          FileSecurity fileSecurity = fileInfo.GetAccessControl();
-          StringBuilder stringBuilder = new StringBuilder();
-          foreach (FileSystemAccessRule fsar in fileSecurity.GetAccessRules(true, true, typeof(System.Security.Principal.SecurityIdentifier))) {
-            if (stringBuilder.Length != 0) {
-              stringBuilder.Append(",");
-            }
-            stringBuilder.Append(fsar.IdentityReference.Value);
-          }
-          responseSb.AppendLine(stringBuilder.ToString());
-          responseSb.AppendLine(fileInfo.CreationTimeUtc.ToString(Format));
-          responseSb.AppendLine(fileInfo.LastAccessTimeUtc.ToString(Format));
-          responseSb.AppendLine(fileInfo.LastWriteTimeUtc.ToString(Format));
-          responseSb.AppendLine(fileInfo.Length + "");
+          responseSb.Append("Error: Did not get success status trying to connect to share tree = ");
+          responseSb.AppendLine(status.ToString());
         }
         byte[] resBytes = utf8.GetBytes(responseSb.ToString());
         context.Response.ContentType = "text/plain";
@@ -101,6 +139,10 @@ namespace SmbFetcher {
         CancellationToken ct) {
       await buffer.CopyToAsync(response.OutputStream, ChunkSize, ct);
       response.OutputStream.Flush();
+    }
+
+    public void Dispose() {
+      smb.Disconnect();
     }
   }
 }
