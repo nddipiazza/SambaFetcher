@@ -75,50 +75,51 @@ namespace SmbFetcher {
           status = tree.CreateFile(out handle, out fs, path == null ? "" : path, AccessMask.GENERIC_READ, 0, ShareAccess.Read, CreateDisposition.FILE_OPEN,
                                    CreateOptions.FILE_DIRECTORY_FILE, null);
           if (status == NTStatus.STATUS_SUCCESS) {
-            status = tree.GetFileInformation(out FileInformation fileInformation, handle, FileInformationClass.FileBasicInformation);
-            if (status == NTStatus.STATUS_SUCCESS) {
-              FileBasicInformation fileBasicInformation = (FileBasicInformation)fileInformation;
-              if (fileBasicInformation.FileAttributes.HasFlag(SMBLibrary.FileAttributes.Directory)) {
-                status = tree.QueryDirectory(out List<QueryDirectoryFileInformation> files, handle, "*", FileInformationClass.FileDirectoryInformation);
-                foreach (QueryDirectoryFileInformation file in files) {
-                  if (file.FileInformationClass.Equals(FileInformationClass.FileDirectoryInformation)) {
-                    FileDirectoryInformation fileDirectoryInformation = (FileDirectoryInformation)file;
-                    if (fileDirectoryInformation.FileName.Equals(".") || fileDirectoryInformation.FileName.Equals("..")) {
-                      continue;
-                    }
-                    if (fileDirectoryInformation.FileAttributes.HasFlag(SMBLibrary.FileAttributes.Directory)) {
-                      responseSb.AppendLine("directory\t" + fileDirectoryInformation.FileName);
-                    } else {
-                      responseSb.Append("file\t" + fileDirectoryInformation.FileName);
-                      responseSb.Append("\t" + fileDirectoryInformation.LastAccessTime.ToString(Format));
-                      responseSb.Append("\t" + fileDirectoryInformation.LastWriteTime.ToString(Format));
-                      responseSb.AppendLine("\t" + fileDirectoryInformation.CreationTime.ToString(Format));
-                    }
-                  }
+            status = tree.QueryDirectory(out List<QueryDirectoryFileInformation> files, handle, "*", FileInformationClass.FileDirectoryInformation);
+            foreach (QueryDirectoryFileInformation file in files) {
+              if (file.FileInformationClass.Equals(FileInformationClass.FileDirectoryInformation)) {
+                FileDirectoryInformation fileDirectoryInformation = (FileDirectoryInformation)file;
+                if (fileDirectoryInformation.FileName.Equals(".") || fileDirectoryInformation.FileName.Equals("..")) {
+                  continue;
                 }
-              } else {
-                responseSb.AppendLine("file");
-                status = tree.GetSecurityInformation(out SecurityDescriptor securityDescriptor, handle, SecurityInformation.DACL_SECURITY_INFORMATION |
-                                            SecurityInformation.SACL_SECURITY_INFORMATION | SecurityInformation.OWNER_SECURITY_INFORMATION);
+                if (fileDirectoryInformation.FileAttributes.HasFlag(SMBLibrary.FileAttributes.Directory)) {
+                  responseSb.AppendLine("directory\t" + fileDirectoryInformation.FileName);
+                } else {
+                  responseSb.Append("file\t" + fileDirectoryInformation.FileName);
+                  responseSb.Append("\t" + fileDirectoryInformation.LastAccessTime.ToString(Format));
+                  responseSb.Append("\t" + fileDirectoryInformation.LastWriteTime.ToString(Format));
+                  responseSb.AppendLine("\t" + fileDirectoryInformation.CreationTime.ToString(Format));
+                }
+              }
+            }
+          } else {
+            status = tree.CreateFile(out handle, out fs, path == null ? "" : path, AccessMask.GENERIC_READ, 0, ShareAccess.Read, CreateDisposition.FILE_OPEN,
+                         CreateOptions.FILE_NON_DIRECTORY_FILE, null);
+            if (status == NTStatus.STATUS_SUCCESS) {
+              responseSb.AppendLine("file");
+              status = tree.GetFileInformation(out FileInformation fileInformation, handle, FileInformationClass.FileBasicInformation);
+              if (status == NTStatus.STATUS_SUCCESS) {
+                FileBasicInformation fileAllInformation = (FileBasicInformation)fileInformation;
+                status = tree.GetSecurityInformation(out SecurityDescriptor securityDescriptor, handle, SecurityInformation.GROUP_SECURITY_INFORMATION);
                 if (status == NTStatus.STATUS_SUCCESS) {
                   StringBuilder stringBuilder = new StringBuilder();
                   responseSb.AppendLine(stringBuilder.ToString());
-                  responseSb.AppendLine(fileBasicInformation.CreationTime.ToString());
-                  responseSb.AppendLine(fileBasicInformation.LastAccessTime.ToString());
-                  responseSb.AppendLine(fileBasicInformation.LastWriteTime.ToString());
-                  responseSb.AppendLine(fileBasicInformation.Length + "");
+                  responseSb.AppendLine(fileAllInformation.CreationTime.Time.Value.ToString(Format));
+                  responseSb.AppendLine(fileAllInformation.LastAccessTime.Time.Value.ToString(Format));
+                  responseSb.AppendLine(fileAllInformation.LastWriteTime.Time.Value.ToString(Format));
+                  responseSb.AppendLine(fileAllInformation.Length + "");                  
                 } else {
-                  responseSb.Append("Error: Did not get success status when getting file security information = ");
+                  responseSb.Append("Error: Did not get success status trying to get file security information = ");
                   responseSb.AppendLine(status.ToString());
                 }
+              } else {
+                responseSb.Append("Error: Did not get success status trying to connect to file all information = ");
+                responseSb.AppendLine(status.ToString());
               }
             } else {
-              responseSb.Append("Error: Did not get success status when getting file information = ");
+              responseSb.Append("Error: Did not get success status trying to connect to file = ");
               responseSb.AppendLine(status.ToString());
             }
-          } else {
-            responseSb.Append("Error: Did not get success status trying to connect to file = ");
-            responseSb.AppendLine(status.ToString());
           }
         } else {
           responseSb.Append("Error: Did not get success status trying to connect to share tree = ");
