@@ -8,6 +8,8 @@ using System.Text;
 using System.Collections.Generic;
 using SMBLibrary.Client;
 using SMBLibrary;
+using System.Security.Principal;
+using System.Net;
 
 namespace SmbFetcher {
   public class SmbServerModule : Unosquare.Labs.EmbedIO.WebModuleBase, IDisposable {
@@ -29,12 +31,19 @@ namespace SmbFetcher {
       AddHandler(Unosquare.Labs.EmbedIO.ModuleMap.AnyPath, HttpVerbs.Head, (context, ct) => HandleGet(context, ct, false));
       AddHandler(Unosquare.Labs.EmbedIO.ModuleMap.AnyPath, HttpVerbs.Get, (context, ct) => HandleGet(context, ct));
       smb = new SMB2Client();
-      if (!smb.Connect(System.Net.IPAddress.Parse(host), SMBTransportType.DirectTCPTransport)) {
+      if (!smb.Connect(Dns.GetHostEntry(host).AddressList[0], SMBTransportType.DirectTCPTransport)) {
         Console.WriteLine("Error connecting.");
       }
-      var status = smb.Login(domain, username, password);
+      var status = smb.Login(domain == null ? string.Empty : domain, username, password);
       if (status != NTStatus.STATUS_SUCCESS) {
         throw new Exception("Could not connect to smb server. Status: " + status);
+      } else {
+        NTStatus connectStatus;
+        SMB2FileStore tree = smb.TreeConnect(share, out connectStatus) as SMB2FileStore;
+        if (connectStatus != NTStatus.STATUS_SUCCESS) {
+          throw new Exception("Connecting to tree resulted in " + connectStatus);
+        }
+        tree.Disconnect();
       }
       this.share = share;
     }
@@ -120,11 +129,20 @@ namespace SmbFetcher {
               status = tree.GetFileInformation(out FileInformation fileInformation, handle, FileInformationClass.FileBasicInformation);
               if (status == NTStatus.STATUS_SUCCESS) {
                 FileBasicInformation fileAllInformation = (FileBasicInformation)fileInformation;
-                status = tree.GetSecurityInformation(out SecurityDescriptor securityDescriptor, handle, SecurityInformation.OWNER_SECURITY_INFORMATION);
+                status = tree.GetSecurityInformation(out SecurityDescriptor securityDescriptor, handle, SecurityInformation.OWNER_SECURITY_INFORMATION | SecurityInformation.GROUP_SECURITY_INFORMATION | SecurityInformation.DACL_SECURITY_INFORMATION | SecurityInformation.SACL_SECURITY_INFORMATION);
                 if (status == NTStatus.STATUS_SUCCESS) {
-                  StringBuilder stringBuilder = new StringBuilder();
-                  // TODO - add ACL sids here...
-                  responseSb.AppendLine(stringBuilder.ToString());
+                  int aceIdx = 0;
+                  foreach (ACE ace in securityDescriptor.Dacl) {
+                    byte[] bytes = new byte[ace.Length];
+                    int offset = 0;
+                    ace.WriteBytes(bytes, ref offset);
+                    SecurityIdentifier securityIdentifier = new SecurityIdentifier(bytes, 0);
+                    if (aceIdx++ != 0) {
+                      responseSb.Append(",");
+                    }
+                    responseSb.Append(securityIdentifier.Value);
+                  }
+                  responseSb.AppendLine();
                   responseSb.AppendLine(fileAllInformation.CreationTime.Time.Value.ToString(Format));
                   responseSb.AppendLine(fileAllInformation.LastAccessTime.Time.Value.ToString(Format));
                   responseSb.AppendLine(fileAllInformation.LastWriteTime.Time.Value.ToString(Format));

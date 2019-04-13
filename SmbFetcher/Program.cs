@@ -12,7 +12,7 @@ namespace SmbFetcher {
     [Option('u', "username", Required = true, HelpText = "Username to authenticate with while accessing the windows share.")]
     public string Username { get; set; }
 
-    [Option('d', "domain", Required = true, HelpText = "Domain to authenticate with while accessing the windows share.")]
+    [Option('d', "domain", HelpText = "Domain to authenticate with while accessing the windows share.")]
     public string Domain { get; set; }
 
     [Option('r', "port", Required = true, HelpText = "Port of the local web server.")]

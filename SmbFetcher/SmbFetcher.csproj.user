@@ -5,9 +5,9 @@
   </PropertyGroup>
   <PropertyGroup Condition=" '$(RunConfiguration)' == 'Default' ">
     <StartAction>Project</StartAction>
-    <StartArguments>-s fun -u administrator -d fusionis -h localhost -r 4001 -H 192.168.1.29 -p FroFro123#</StartArguments>
+    <StartArguments>-s share -u brab -h localhost -r 4001 -H 192.168.1.57 -p some password</StartArguments>
     <EnvironmentVariables>
-      <Variable name="PWD" value="YourPassword" />
+      <Variable name="PWD" value="some password" />
     </EnvironmentVariables>
   </PropertyGroup>
 </Project>
