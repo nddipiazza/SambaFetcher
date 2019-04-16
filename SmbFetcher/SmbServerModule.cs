@@ -22,6 +22,14 @@ namespace SmbFetcher {
     SMB2Client smb;
     string share;
 
+    private string GetSidString(SID sid) {
+      byte[] bytes = new byte[sid.Length];
+      int offset = 0;
+      sid.WriteBytes(bytes, ref offset);
+      SecurityIdentifier securityIdentifier = new SecurityIdentifier(bytes, 0);
+      return securityIdentifier.Value;
+    }
+
     /// <summary>
     /// Initializes a new instance of the <see cref="SmbServerModule"/> class.
     /// </summary>
@@ -31,6 +39,9 @@ namespace SmbFetcher {
       AddHandler(Unosquare.Labs.EmbedIO.ModuleMap.AnyPath, HttpVerbs.Head, (context, ct) => HandleGet(context, ct, false));
       AddHandler(Unosquare.Labs.EmbedIO.ModuleMap.AnyPath, HttpVerbs.Get, (context, ct) => HandleGet(context, ct));
       smb = new SMB2Client();
+      if (password == null || password.Trim().Length == 0) {
+        password = Environment.GetEnvironmentVariable("PWD");
+      }
       if (!smb.Connect(Dns.GetHostEntry(host).AddressList[0], SMBTransportType.DirectTCPTransport)) {
         Console.WriteLine("Error connecting.");
       }
@@ -56,10 +67,10 @@ namespace SmbFetcher {
     async Task<bool> HandleGet(Unosquare.Labs.EmbedIO.IHttpContext context, CancellationToken ct, bool sendBuffer = true) {
       string action = context.Request.Headers["action"];
       string path = context.Request.Headers["path"];
-      //Console.WriteLine("Request action={0}, path={1}", action, path);
+      Console.WriteLine("Request action={0}, path={1}", action, path);
 
       if (action == null) {
-        context.Response.StatusCode = 200;
+        Console.WriteLine("No action specified. Returning 200 status");
         return true;
       }
 
@@ -104,6 +115,7 @@ namespace SmbFetcher {
           status = tree.CreateFile(out handle, out fs, path == null ? "" : path, AccessMask.GENERIC_READ, 0, ShareAccess.Read, CreateDisposition.FILE_OPEN,
                                    CreateOptions.FILE_DIRECTORY_FILE, null);
           if (status == NTStatus.STATUS_SUCCESS) {
+            responseSb.AppendLine("directory"); // It is a directory
             status = tree.QueryDirectory(out List<QueryDirectoryFileInformation> files, handle, "*", FileInformationClass.FileDirectoryInformation);
             foreach (QueryDirectoryFileInformation file in files) {
               if (file.FileInformationClass.Equals(FileInformationClass.FileDirectoryInformation)) {
@@ -125,51 +137,63 @@ namespace SmbFetcher {
             status = tree.CreateFile(out handle, out fs, path == null ? "" : path, AccessMask.GENERIC_READ, 0, ShareAccess.Read, CreateDisposition.FILE_OPEN,
                          CreateOptions.FILE_NON_DIRECTORY_FILE, null);
             if (status == NTStatus.STATUS_SUCCESS) {
-              responseSb.AppendLine("file");
+              responseSb.AppendLine("file"); // It is not a directory
               status = tree.GetFileInformation(out FileInformation fileInformation, handle, FileInformationClass.FileBasicInformation);
               if (status == NTStatus.STATUS_SUCCESS) {
                 FileBasicInformation fileAllInformation = (FileBasicInformation)fileInformation;
-                status = tree.GetSecurityInformation(out SecurityDescriptor securityDescriptor, handle, SecurityInformation.OWNER_SECURITY_INFORMATION | SecurityInformation.GROUP_SECURITY_INFORMATION | SecurityInformation.DACL_SECURITY_INFORMATION | SecurityInformation.SACL_SECURITY_INFORMATION);
+                status = tree.GetSecurityInformation(out SecurityDescriptor securityDescriptor,
+                   handle,
+                   SecurityInformation.OWNER_SECURITY_INFORMATION |
+                    SecurityInformation.GROUP_SECURITY_INFORMATION |
+                    SecurityInformation.DACL_SECURITY_INFORMATION);
                 if (status == NTStatus.STATUS_SUCCESS) {
                   int aceIdx = 0;
                   foreach (ACE ace in securityDescriptor.Dacl) {
-                    byte[] bytes = new byte[ace.Length];
-                    int offset = 0;
-                    ace.WriteBytes(bytes, ref offset);
-                    SecurityIdentifier securityIdentifier = new SecurityIdentifier(bytes, 0);
+                    if (ace is AceType1) {
+                      AceType1 aceType = (AceType1)ace;
+                      if (aceType.Header.AceType == AceType.ACCESS_ALLOWED_ACE_TYPE) {
+                        responseSb.Append("WINA");
+                      } else {
+                        responseSb.Append("WIND");
+                      }
+                      responseSb.Append(GetSidString(aceType.Sid));
+                    }
                     if (aceIdx++ != 0) {
                       responseSb.Append(",");
                     }
-                    responseSb.Append(securityIdentifier.Value);
                   }
                   responseSb.AppendLine();
                   responseSb.AppendLine(fileAllInformation.CreationTime.Time.Value.ToString(Format));
                   responseSb.AppendLine(fileAllInformation.LastAccessTime.Time.Value.ToString(Format));
                   responseSb.AppendLine(fileAllInformation.LastWriteTime.Time.Value.ToString(Format));
-                  responseSb.AppendLine(fileAllInformation.Length + "");                  
+                  responseSb.AppendLine(fileAllInformation.Length + "");
+                  responseSb.AppendLine(GetSidString(securityDescriptor.GroupSid));
+                  responseSb.AppendLine(GetSidString(securityDescriptor.OwnerSid));
                 } else {
-                  responseSb.Append("Error: Did not get success status trying to get file security information = ");
-                  responseSb.AppendLine(status.ToString());
+                  Console.WriteLine("Error: Did not get success status trying to get file metadata = {0}", status);
+                  context.Response.StatusCode = 500;
+                  return true;
                 }
               } else {
-                responseSb.Append("Error: Did not get success status trying to connect to file all information = ");
-                responseSb.AppendLine(status.ToString());
+                Console.WriteLine("Error: Did not get success status trying to connect to file all information = {0}", status);
+                context.Response.StatusCode = 500;
+                return true;
               }
             } else {
-              responseSb.Append("Error: Did not get success status trying to connect to file = ");
-              responseSb.AppendLine(status.ToString());
+              Console.WriteLine("Error: Did not get success status trying to connect to file = {0}", status);
+              context.Response.StatusCode = 500;
+              return true;
             }
           }
         } else {
-          responseSb.Append("Error: Did not get success status trying to connect to share tree = ");
-          responseSb.AppendLine(status.ToString());
+          Console.WriteLine("Error: Did not get success status trying to connect to share tree = {0}", status);
+          context.Response.StatusCode = 500;
+          return true;
         }
         byte[] resBytes = utf8.GetBytes(responseSb.ToString());
         context.Response.ContentType = "text/plain";
         context.Response.OutputStream.Write(resBytes, 0, resBytes.Length);
-        context.Response.StatusCode = 200;
       }
-
       return true;
     }
 

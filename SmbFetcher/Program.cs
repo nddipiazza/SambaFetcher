@@ -42,6 +42,8 @@ namespace SmbFetcher {
       using (SmbServerModule module = new SmbServerModule(options.SmbHost, options.Domain, options.Username, options.Password, options.Share)) {
         var url = string.Format("http://{0}:{1}/", options.Host, options.Port);
 
+
+        Console.WriteLine("Server URL: {0}", url);
         var server = new WebServer(url, RoutingStrategy.Regex);
 
         server.RegisterModule(module);
